@@ -1,0 +1,34 @@
+## 3. วิธีการสแกนความปลอดภัยด้วย Semgrep (How to Scan)
+
+เปิด Terminal ในโฟลเดอร์โปรเจกต์ที่เก็บไฟล์ password_validator.js และ main.rs จากนั้นรันคำสั่งสแกน:
+
+* **สแกนอัตโนมัติตามภาษาที่ตรวจพบในโฟลเดอร์:**
+  
+bash
+  semgrep scan --config auto
+  
+
+* **สแกนเจาะจงกฎความปลอดภัยของ OWASP, JavaScript และ Rust:**
+  
+bash
+  semgrep scan --config p/owasp-top-ten --config p/javascript --config p/rust .
+  
+
+
+4. สรุปผล Semgrep และคำอธิบาย
+4.1 การวิเคราะห์ความปลอดภัยของโค้ดทั้ง 2 ไฟล์ตามหลักเกณฑ์ของ Semgrep
+เมื่อนำไฟล์ password_validator.js และ main.rs ไปตรวจสอบด้วยเครื่องมือ Static Application Security Testing (SAST) อย่าง Semgrep โครงสร้างโค้ดทั้งสองเวอร์ชันได้รับการออกแบบให้ปลอดจากช่องโหว่หลักในหมวดหมู่ต่อไปนี้:
+ * ไม่มีการรั่วไหลของข้อมูลสำคัญ (Sensitive Data Exposure / Cleartext Logging):
+   กฎของ Semgrep จะตรวจจับการนำตัวแปรที่ชื่อเกี่ยวข้องกับรหัสผ่าน (เช่น password, passwordInput, password_input) ไปส่งออกทาง console.log(), println!() หรือฟังก์ชันเขียนไฟล์ (fs.writeFile, std::fs::write) ซึ่งในโค้ดทั้งสองไฟล์มีการแสดงผลเฉพาะค่า username และความยาว charLength เท่านั้น ไม่มีการพิมพ์ค่ารหัสผ่านซ้ำและไม่มีการเรียกใช้ไลบรารีจัดการไฟล์
+ * ปลอดภัยจากช่องโหว่ ReDoS (Regular Expression Denial of Service):
+   * ใน password_validator.js ฟังก์ชัน validateEmail ใช้รูปแบบ /^[^\s@]+@[^\s@]+\.[^\s@]+$/ ซึ่งเป็นรูปแบบ Linear Time ที่ไม่มีการซ้อนทับของ Quantifier (Catastrophic Backtracking) จึงไม่ทำให้เกิดอาการค้างเมื่อรับข้อมูลขนาดยาว
+   * ใน main.rs ฟังก์ชัน validate_email ใช้การแยกสตริงด้วย .split('@') แทนการใช้ Regex ทำให้ตัดความเสี่ยงด้าน ReDoS ออกทั้งหมด
+ * ไม่มีการรันคำสั่งอันตรายและไม่มีการใช้ Unsafe Code:
+   โค้ด JavaScript ไม่มีการเรียกใช้ฟังก์ชันประมวลผลสตริงเป็นโค้ด (เช่น eval(), new Function()) และโค้ด Rust ใช้ Safe Rust ทั้งหมดโดยไม่มีบล็อก unsafe ทำให้ป้องกันข้อผิดพลาดด้านหน่วยความจำ (Memory Safety) ได้ตามมาตรฐานของภาษา
+4.2 ตารางและข้อความสำหรับสรุปผลหลังรันคำสั่งสแกนบนเครื่อง
+นำผลลัพธ์ที่ได้จากการรันคำสั่ง semgrep scan --config p/owasp-top-ten --config p/javascript --config p/rust . บนเครื่องของกลุ่มมากรอกลงในตารางด้านล่างเพื่อส่งงาน:
+| ไฟล์ที่ตรวจสอบ | ชุดกฎที่ใช้สแกน (Ruleset) | จำนวนปัญหาที่พบ (Findings) | สถานะ | คำอธิบายผลการตรวจสอบ |
+|---|---|---|---|---|
+| password_validator.js | p/javascript, p/owasp-top-ten | (ระบุตัวเลขที่รันได้ เช่น 0) | ผ่าน | ไม่พบการใช้ฟังก์ชันอันตราย ไม่พบช่องโหว่ ReDoS และไม่มีการบันทึกหรือแสดงค่ารหัสผ่านใน Log |
+| main.rs | p/rust, p/owasp-top-ten | (ระบุตัวเลขที่รันได้ เช่น 0) | ผ่าน | โค้ดทำงานภายใต้ Safe Rust ทั้งหมด ไม่มีการใช้ unsafe และไม่มีการเขียนข้อมูลรหัสผ่านลงไฟล์ |
+(หมายเหตุเพิ่มเติมสำหรับอธิบายผู้สอน: หาก Semgrep แสดงข้อความแจ้งเตือนระดับ Info เกี่ยวกับการไม่พบไฟล์ Cargo.toml สำหรับ Rust สามารถอธิบายได้ว่าไฟล์ main.rs ถูกสร้างเป็นไฟล์เดี่ยวที่ใช้เฉพาะ std::io และคอมไพล์ผ่าน rustc โดยตรง จึงไม่จำเป็นต้องใช้ไฟล์จัดการ Dependency ภายนอก)
